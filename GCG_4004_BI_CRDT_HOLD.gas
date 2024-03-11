@@ -1,0 +1,115 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Variable.Global.iLogID.Declare(Long,0)
+Variable.Global.iBIRunID.Declare(Long,0)
+Variable.UDT.uReport.Define("BIRUNID",Long)
+Variable.UDT.uReport.Define("CUSTOMER",String,CUSTOMER)
+Variable.UDT.uReport.Define("NAME_CUSTOMER_SHIP",String,NAME_CUSTOMER_SHIP)
+Variable.UDT.uReport.Define("QUOTE_NO",String,QUOTE_NO)
+Variable.UDT.uReport.Define("QTE_CREATED_DATE",String,QTE_CREATED_DATE)
+Variable.UDT.uReport.Define("QTE_EXP_DATE",String,QTE_EXP_DATE)
+Variable.UDT.uReport.Define("FLAG_CRDT_HOLD",String,FLAG_CRDT_HOLD)
+Variable.uGlobal.uReport.Declare("uReport")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+'Quotes on CREDIT HOLD
+'Coded BY SFF
+'3/5/52015
+
+'Connection
+F.ODBC.Connection!conX.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+
+F.Global.BI.GetRunID(V.Global.iBIRunID)
+F.Global.BI.StartLogging(V.Global.iBIRunID,-1,-1,"",V.Global.iLogID)
+'Get Data
+F.Intrinsic.Control.CallSub(Getdata)
+F.Global.BI.StopLogging(V.Global.iLogID)
+'Run Report
+F.Intrinsic.Control.CallSub(Callbi)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4004_BI_CRDT_HOLD.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.GETDATA.Start
+F.Intrinsic.Control.SetErrorHandler("GETDATA_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.sSql.Declare(String)
+
+'redim udt to load from recordset
+V.uGlobal.uReport.Redim(-1,-1)
+
+'Build Sql String
+V.Local.sSql.Set("Select a.CUSTOMER,A.NAME_CUSTOMER_SHIP,b.QUOTE_NO, b.QTE_CREATED_DATE,CAST(DATEADD(day,cast(LTRIM(RTRIM(SUBSTRING(b.EXPIRATION,1,3))) as Numeric(8,0)),b.QTE_CREATED_DATE) as DATE) as QTE_EXP_DATE, 'Y' as FLAG_CRDT_HOLD ")
+F.Intrinsic.String.Build("{0}from V_CUSTOMER_SHIPTO a left outer join v_QUOTE_HEADER b on a.customer = b.customer left outer join V_CUSTOMER_MASTER c on b.customer = c.customer where QTE_EXP_DATE > curdate() and c.FLAG_CREDIT_HOLD = 'Y'",V.Local.sSql,V.Local.sSql)
+'Open RecordSet
+F.ODBC.Connection!conX.OpenRecordsetRO("rst",V.Local.sSql)
+F.Intrinsic.Control.If(V.ODBC.conX!rst.EOF,<>,True)
+	'Load UDT
+	F.Intrinsic.Variable.LoadUDTFromRecordset("conX","rst","V.uGlobal.uReport",False)
+	F.Intrinsic.Variable.SetUDTFieldReference(V.uGlobal.uReport!BIRUNID,"BIRUNID")
+	F.Intrinsic.Variable.UDTSetMemberValue(V.uGlobal.uReport!BIRUNID,V.Global.iBIRunID)
+	'Save Records to BI TABLE
+	F.ODBC.Connection!conX.OpenRecordsetRW("rstSave","Select * from GCG_BI_CRDT_HOLD")
+	F.Intrinsic.Control.If(V.uGlobal.uReport.LBound,<>,-1)
+		F.Intrinsic.Variable.SaveUDTToRecordSet("conX","rstSave","v.uGlobal.uReport")
+	F.Intrinsic.Control.EndIf
+	F.ODBC.conX!rstSave.Close
+F.Intrinsic.Control.EndIf
+F.ODBC.conX!rst.Close
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("GETDATA_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4004_BI_CRDT_HOLD.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.GETDATA.End
+
+Program.Sub.CallBI.Start
+F.Intrinsic.Control.SetErrorHandler("CallBI_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.iRet.Declare(Long)
+
+'Run Report
+F.Global.BI.RunReportPreProcessor(V.Global.iBIRunID,V.Global.iLogID,"","","",-1,True,"",-1,"",-1,"","",V.Local.iRet)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("CallBI_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4004_BI_CRDT_HOLD.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.CallBI.End
+
+Program.Sub.Comments.Start
+${$0$}$GCG_BI_CRDT_HOLD$}$SUPERVSR$}$3/16/2015
+${$3$}$0$}$$}$-1$}$-1$}$$}$1/1/1900$}$CUSTOMERS OPEN QUOTES CURRENTLY ON CREDIT HOLD
+Program.Sub.Comments.End
+
